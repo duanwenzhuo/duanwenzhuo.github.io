@@ -1,0 +1,35 @@
+自变量X类型	  自变量X组数	  因变量Y类型	  分析方法
+离散（类别）	  仅仅2组	      连续（均值）	  t检验
+离散（类别）	  2组及以上	    连续（均值）	  ANOVA
+离散（类别）	  2组及以上	    离散（类别）	  卡方检验
+
+
+
+##########################################################################################################
+anova
+第 2 步：执行方差分析检验
+单因素方差分析one.way <- aov(yield ~ fertilizer, data = crop.data)
+双因素方差分析two.way <- aov(yield ~ fertilizer + density, data = crop.data)
+添加变量之间的交互interaction <- aov(yield ~ fertilizer*density, data = crop.data)
+第 3 步：找到最适合的模型
+library(AICcmodavg)
+model.set <- list(one.way, two.way, interaction, blocking)
+model.names <- c("one.way", "two.way", "interaction", "blocking")
+aictab(model.set, modnames = model.names)
+第 4 步：检查同方差性
+par(mfrow=c(2,2))
+plot(two.way)
+par(mfrow=c(1,1))
+第 5 步：进行事后测试
+tukey.two.way<-TukeyHSD(two.way)
+tukey.two.way
+第 6 步：在图表中绘制结果
+tukey.plot.aov<-aov(yield ~ fertilizer:density, data=crop.data)
+tukey.plot.test<-TukeyHSD(tukey.plot.aov)
+plot(tukey.plot.test, las = 1)
+绘制原始数据+将均值误差和标准误差添加到图形中
+two.way.plot <- ggplot(crop.data, aes(x = density, y = yield, group=fertilizer)) +
+  geom_point(cex = 1.5, pch = 1.0,position = position_jitter(w = 0.1, h = 0))+
+  stat_summary(fun.data = 'mean_se', geom = 'errorbar', width = 0.2) +
+  stat_summary(fun.data = 'mean_se', geom = 'pointrange') +
+  geom_point(data=mean.yield.data, aes(x=density, y=yield))
