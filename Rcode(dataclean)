@@ -1,0 +1,169 @@
+Function	                        Utility	Package
+%>%	                              “pipe” (pass) data from one function to the next	magrittr
+mutate()	                        create, transform, and re-define columns	dplyr
+select()	                         keep, remove, select, or re-name columns	dplyr
+rename()	                          rename columns	dplyr
+clean_names()	                        standardize the syntax of column names	janitor
+as.character(), , , etc.as.numeric()as.Date()	                    convert the class of a column	base R
+across()	                    transform multiple columns at one time	dplyr
+
+
+tidyselect functions	use logic to select columns	tidyselect
+filter()	                  keep certain rows	dplyr
+distinct()	                de-duplicate rows	dplyr
+rowwise()	                  operations by/within each row	dplyr
+add_row()	                    add rows manually	tibble
+arrange()	                sort rows	dplyr
+recode()	                  re-code values in a column	dplyr
+case_when()	                    re-code values in a column using more complex logical criteria	dplyr
+replace_na(), , na_if()coalesce()	              special functions for re-coding	tidyr
+age_categories() and cut()	                  create categorical groups from a numeric column	epikit and base R
+match_df()	                  re-code/clean values using a data dictionary	matchmaker
+which()                      	apply logical criteria; return indices	base R
+
+######################################################################################################################################################################################################################################
+
+
+data clean  pepline
+1.packages
+pacman::p_load(
+  rio,        # importing data  
+  here,       # relative file pathways  
+  janitor,    # data cleaning and tables
+  lubridate,  # working with dates
+  matchmaker, # dictionary-based cleaning
+  epikit,     # age_categories() function
+  tidyverse   # data management and visualization
+)
+
+2.import
+linelist_raw <- import("linelist_raw.xlsx")
+
+3. get an overview of the entire dataframe 
+skimr::skim(linelist_raw)
+
+4.Column names
+names(linelist_raw)
+linelist <- linelist_raw %>% 
+  janitor::clean_names()
+replace =replace = c(onset = "date_of_onset"))
+linelist <- linelist_raw %>%
+    janitor::clean_names() %>% 
+           # NEW name             # OLD name
+    rename(date_infection       = infection_date,
+           date_outcome         = date_of_outcome)
+
+5 Select or re-order columns
+linelist %>% 
+  select(#排好顺序的列名 everything())) %>% 
+  names()  # display the column names
+  select(-c(date_onset, fever:vomit)) %>% # remove date_onset and all columns from fever to vomit
+  names()
+
+6 Deduplication
+distinct()
+
+7 Column creation and transformation
+new_col_demo <- linelist %>%                       
+  mutate(
+    new_var_dup    = case_id,             # new column = duplicate/copy another existing column
+    new_var_static = 7,                   # new column = all values the same
+    new_var_static = new_var_static + 5,  # you can overwrite a column, and it can be a calculation using other variables
+    new_var_paste  = stringr::str_glue("{hospital} on ({date_hospitalisation})") # new column = pasting together values from other columns
+    ) %>% 
+  select(case_id, hospital, date_hospitalisation, contains("new"))        # show only new columns, for demonstration purposes
+linelist <- linelist %>% 
+  mutate(age = as.numeric(age))%>%  #转换类型
+  group_by(hospital)   
+
+8 Re-code values
+# fix incorrect values                   # old value       # new value
+linelist <- linelist %>% 
+  mutate(date_onset = recode(date_onset, "2014-14-15" = "2014-04-15"))
+
+9 Numeric categories
+#check the class of the linelist variable age
+class(linelist$age_years)
+# examine the distribution
+hist(linelist$age_years)
+
+10 Add rows
+add_row()
+
+11 Filter rows
+linelist <- linelist %>% 
+  filter(gender == "f")   # keep only rows where gender is equal to "f"
+
+总的：
+#################################################################################################################################################################################################################################
+
+linelist <- linelist_raw %>%
+    
+    # standardize column name syntax
+    janitor::clean_names() %>% 
+    
+    # manually re-name columns
+           # NEW name             # OLD name
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # remove column
+    select(-c(row_num, merged_header, x28)) %>% 
+  
+    # de-duplicate
+    distinct(.keep_all=TRUE) %>% 
+
+    # add column
+    mutate(bmi = wt_kg / (ht_cm/100)^2) %>%     
+
+    # convert class of columns
+    mutate(across(contains("date"), as.Date), 
+           generation = as.numeric(generation),
+           age        = as.numeric(age)) %>% 
+    
+    # add column: delay to hospitalisation
+    mutate(days_onset_hosp = as.numeric(date_hospitalisation - date_onset)) %>% 
+    
+    # clean values of hospital column
+    mutate(hospital = recode(hospital,
+                      # OLD = NEW
+                      "Mitylira Hopital"  = "Military Hospital",
+                      "Mitylira Hospital" = "Military Hospital",
+                      "Military Hopital"  = "Military Hospital",
+                      "Port Hopital"      = "Port Hospital",
+                      "Central Hopital"   = "Central Hospital",
+                      "other"             = "Other",
+                      "St. Marks Maternity Hopital (SMMH)" = "St. Mark's Maternity Hospital (SMMH)"
+                      )) %>% 
+    
+    mutate(hospital = replace_na(hospital, "Missing")) %>% 
+
+    # create age_years column (from age and age_unit)
+    mutate(age_years = case_when(
+          age_unit == "years" ~ age,
+          age_unit == "months" ~ age/12,
+          is.na(age_unit) ~ age)) %>% 
+  
+    mutate(
+          # age categories: custom
+          age_cat = epikit::age_categories(age_years, breakers = c(0, 5, 10, 15, 20, 30, 50, 70)),
+        
+          # age categories: 0 to 85 by 5s
+          age_cat5 = epikit::age_categories(age_years, breakers = seq(0, 85, 5))) %>% 
+
+    filter(
+          # keep only rows where case_id is not missing
+          !is.na(case_id),  
+          
+          # also filter to keep only the second outbreak
+          date_onset > as.Date("2013-06-01") | (is.na(date_onset) & !hospital %in% c("Hospital A", "Hospital B")))
+
+简化：
+df %>% 
+  na.omit()%>%  #删除缺少值的行
+  mutate(across(where(is.numeric), ~replace_na(., median(., na.rm=TRUE))))%>%        #将缺失值替换为另一个值 
+  distinct(.keep_all=TRUE)  #删除重复行
+
+############################################################################################################################################################################################################################################################################################################################################################################################################################################################################
+
